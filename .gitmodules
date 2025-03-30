@@ -1,0 +1,18 @@
+[submodule "components/esp_madgwick"]
+	path = components/esp_madgwick
+	url = git@github.com:jango175/esp_madgwick.git
+[submodule "components/esp_mpu6050"]
+	path = components/esp_mpu6050
+	url = git@github.com:jango175/esp_mpu6050.git
+[submodule "components/esp_hmc5883l"]
+	path = components/esp_hmc5883l
+	url = git@github.com:jango175/esp_hmc5883l.git
+[submodule "components/esp_qmc5883l"]
+	path = components/esp_qmc5883l
+	url = https://github.com/jango175/esp_qmc5883l
+[submodule "components/tiny_bldc"]
+	path = components/tiny_bldc
+	url = git@github.com:jango175/tiny_bldc.git
+[submodule "components/elrs_crsf"]
+	path = components/elrs_crsf
+	url = git@github.com:jango175/elrs_crsf.git
