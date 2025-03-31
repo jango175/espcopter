@@ -25,7 +25,7 @@
 
 #define PID_MAX_INTEGRAL 100.0f
 
-// #define TEST_LOOP_SPEED 0 // uncomment to measure performance
+// #define TEST_LOOP_SPEED  0 // uncomment to measure performance
 
 static const char* TAG = "main";
 
@@ -61,10 +61,15 @@ static IRAM_ATTR void stable_flight_task(void* arg)
 
     float des_roll = 0.0f;
     float des_pitch = 0.0f;
+    float des_yaw = 0.0f;
 
     float cur_roll = 0.0f;
     float cur_pitch = 0.0f;
     float cur_yaw = 0.0f;
+
+    float gx = 0.0f;
+    float gy = 0.0f;
+    float gz = 0.0f;
 
     float roll_error = 0.0f;
     float pitch_error = 0.0f;
@@ -84,19 +89,19 @@ static IRAM_ATTR void stable_flight_task(void* arg)
 
     // PID gains
     float roll_kp = 10.0f;
-    float roll_ki = 0.0f;
+    float roll_ki = 0.1f;
     float roll_kd = 0.5f;
 
     float pitch_kp = 10.0f;
-    float pitch_ki = 0.0f;
+    float pitch_ki = 0.1f;
     float pitch_kd = 0.5f;
 
-    float yaw_kp = 1.0f;
+    float yaw_kp = 10.0f;
     float yaw_ki = 0.0f;
     float yaw_kd = 0.0f;
 
     uint32_t dt_ms = 3;
-    float dt = dt_ms / 1000.0f;
+    float dt = dt_ms/1000.0f;
 
     int32_t speed[BLDC_NUM];
     for (uint32_t i = 0; i < BLDC_NUM; i++)
@@ -104,7 +109,6 @@ static IRAM_ATTR void stable_flight_task(void* arg)
 
     while (1)
     {
-
         // check for arm
         get_channels(&channels);
 
@@ -115,6 +119,14 @@ static IRAM_ATTR void stable_flight_task(void* arg)
 
         if (armed)
         {
+            // reset PIDs
+            roll_integral = 0.0f;
+            pitch_integral = 0.0f;
+            yaw_integral = 0.0f;
+            prev_roll_error = 0.0f;
+            prev_pitch_error = 0.0f;
+            prev_yaw_error = 0.0f;
+
             // start bldc motors
             for (uint32_t i = BLDC_MIN_SPEED; i < BLDC_MIN_ROT_SPEED; i++)
             {
@@ -142,6 +154,7 @@ static IRAM_ATTR void stable_flight_task(void* arg)
 
                 // get current attitude
                 esp_madgwick_get_attitude(&cur_roll, &cur_pitch, &cur_yaw);
+                esp_madgwick_get_gyro(&gx, &gy, &gz);
 
                 // roll pid
                 // des_roll = map(channels.channel_1, 0, 2000, -30.0f, 30.0f);
@@ -166,7 +179,8 @@ static IRAM_ATTR void stable_flight_task(void* arg)
                 prev_pitch_error = pitch_error;
 
                 // yaw pid
-                // yaw_error = cur_yaw + map(channels.channel_4, 0, 2000, -0.5f, 0.5f);
+                // des_yaw = map(channels.channel_4, 0, 2000, -100.0f, 100.0f);
+                yaw_error = des_yaw - gz;
                 yaw_integral += yaw_error*dt;
                 if (yaw_integral > PID_MAX_INTEGRAL)
                     yaw_integral = PID_MAX_INTEGRAL;
@@ -176,10 +190,10 @@ static IRAM_ATTR void stable_flight_task(void* arg)
                 prev_yaw_error = yaw_error;
 
                 // mixer
-                speed[0] += (int32_t)(-pitch_pid - roll_pid + yaw_pid);
-                speed[1] += (int32_t)(-pitch_pid + roll_pid - yaw_pid);
-                speed[2] += (int32_t)(pitch_pid + roll_pid + yaw_pid);
-                speed[3] += (int32_t)(pitch_pid - roll_pid - yaw_pid);
+                speed[0] += (int32_t)(-pitch_pid - roll_pid - yaw_pid);
+                speed[1] += (int32_t)(-pitch_pid + roll_pid + yaw_pid);
+                speed[2] += (int32_t)(pitch_pid + roll_pid - yaw_pid);
+                speed[3] += (int32_t)(pitch_pid - roll_pid + yaw_pid);
 
                 // limit speeds
                 for (uint32_t i = 0; i < BLDC_NUM; i++)
@@ -199,6 +213,8 @@ static IRAM_ATTR void stable_flight_task(void* arg)
                 uint64_t loop_end = esp_timer_get_time() - loop_start;
                 ESP_LOGI(TAG, "%lld us", loop_end);
 #endif
+
+                // delay to keep loop speed
                 vTaskDelayUntil(&xLastWakeTime, dt_ms/portTICK_PERIOD_MS);
             }
         }
