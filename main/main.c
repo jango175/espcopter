@@ -23,7 +23,7 @@
 
 #define BLDC_NUM         4
 
-#define PID_MAX_INTEGRAL 100.0f
+#define PID_MAX_INTEGRAL 50000.0f
 
 // #define TEST_LOOP_SPEED  0 // uncomment to measure performance
 
@@ -88,13 +88,13 @@ static IRAM_ATTR void stable_flight_task(void* arg)
     float yaw_integral = 0.0f;
 
     // PID gains
-    float roll_kp = 10.0f;
-    float roll_ki = 0.1f;
-    float roll_kd = 0.5f;
+    float roll_kp = 4.0f;
+    float roll_ki = 10.0f;
+    float roll_kd = 0.4f;
 
-    float pitch_kp = 10.0f;
-    float pitch_ki = 0.1f;
-    float pitch_kd = 0.5f;
+    float pitch_kp = 4.0f;
+    float pitch_ki = 150.0f;
+    float pitch_kd = 0.4f;
 
     float yaw_kp = 10.0f;
     float yaw_ki = 0.0f;
@@ -146,47 +146,70 @@ static IRAM_ATTR void stable_flight_task(void* arg)
 
                 // get channels
                 get_channels(&channels);
+                // ESP_LOGI(TAG, "%d", channels.channel_5);
 
                 // map throttle
-                int32_t throttle = (int32_t)map(channels.channel_3, 0, 2000, BLDC_MIN_ROT_SPEED, BLDC_MAX_SPEED);
+                int32_t throttle = (int32_t)map(channels.channel_3, 150, 1900, BLDC_MIN_ROT_SPEED, BLDC_MAX_SPEED);
                 for (uint32_t i = 0; i < BLDC_NUM; i++)
                     speed[i] = throttle;
 
                 // get current attitude
                 esp_madgwick_get_attitude(&cur_roll, &cur_pitch, &cur_yaw);
                 esp_madgwick_get_gyro(&gx, &gy, &gz);
+                // ESP_LOGI(TAG, "%f\t%f\t%f", cur_roll, cur_pitch, cur_yaw);
 
                 // roll pid
-                // des_roll = map(channels.channel_1, 0, 2000, -30.0f, 30.0f);
+                des_roll = map(channels.channel_1, 150, 1900, -30.0f, 30.0f);
                 roll_error = des_roll - cur_roll;
+
                 roll_integral += roll_error*dt;
+                if (throttle > BLDC_MIN_ROT_SPEED + 80)
+                    roll_integral = 0.0f; // reset integral when throttle is low
+
                 if (roll_integral > PID_MAX_INTEGRAL)
                     roll_integral = PID_MAX_INTEGRAL;
                 else if (roll_integral < -PID_MAX_INTEGRAL)
                     roll_integral = -PID_MAX_INTEGRAL;
-                roll_pid = roll_kp*roll_error + roll_ki*roll_integral + roll_kd*(roll_error - prev_roll_error)/dt;
+
+                roll_pid = roll_kp*roll_error +
+                            roll_ki*roll_integral +
+                            roll_kd*(roll_error - prev_roll_error)/dt;
                 prev_roll_error = roll_error;
 
                 // pitch pid
-                // des_pitch = map(channels.channel_2, 0, 2000, -30.0f, 30.0f);
+                des_pitch = map(channels.channel_2, 150, 1900, -30.0f, 30.0f);
                 pitch_error = des_pitch - cur_pitch;
+
                 pitch_integral += pitch_error*dt;
+                if (throttle > BLDC_MIN_ROT_SPEED + 80)
+                    pitch_integral = 0.0f; // reset integral when throttle is low
+
                 if (pitch_integral > PID_MAX_INTEGRAL)
                     pitch_integral = PID_MAX_INTEGRAL;
                 else if (pitch_integral < -PID_MAX_INTEGRAL)
                     pitch_integral = -PID_MAX_INTEGRAL;
-                pitch_pid = pitch_kp*pitch_error + pitch_ki*pitch_integral + pitch_kd*(pitch_error - prev_pitch_error)/dt;
+
+                pitch_pid = pitch_kp*pitch_error +
+                            pitch_ki*pitch_integral +
+                            pitch_kd*(pitch_error - prev_pitch_error)/dt;
                 prev_pitch_error = pitch_error;
 
                 // yaw pid
-                // des_yaw = map(channels.channel_4, 0, 2000, -100.0f, 100.0f);
+                des_yaw = -map(channels.channel_4, 150, 1900, -150.0f, 150.0f);
                 yaw_error = des_yaw - gz;
+
                 yaw_integral += yaw_error*dt;
+                if (throttle > BLDC_MIN_ROT_SPEED + 80)
+                    yaw_integral = 0.0f; // reset integral when throttle is low
+
                 if (yaw_integral > PID_MAX_INTEGRAL)
                     yaw_integral = PID_MAX_INTEGRAL;
                 else if (yaw_integral < -PID_MAX_INTEGRAL)
                     yaw_integral = -PID_MAX_INTEGRAL;
-                yaw_pid = yaw_kp*yaw_error + yaw_ki*yaw_integral + yaw_kd*(yaw_error - prev_yaw_error)/dt;
+
+                yaw_pid = yaw_kp*yaw_error +
+                            yaw_ki*yaw_integral +
+                            yaw_kd*(yaw_error - prev_yaw_error)/dt;
                 prev_yaw_error = yaw_error;
 
                 // mixer
@@ -273,7 +296,7 @@ void app_main(void)
     }
     tiny_bldc_arm(bldc_conf, BLDC_NUM);
 
-    xTaskCreate(stable_flight_task, "stable_flight_task", 4096, bldc_conf, 12, NULL);
+    xTaskCreate(stable_flight_task, "stable_flight_task", 4096, bldc_conf, 15, NULL);
 
     while (1)
     {
