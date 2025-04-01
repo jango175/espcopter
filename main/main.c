@@ -23,7 +23,7 @@
 
 #define BLDC_NUM         4
 
-#define PID_MAX_INTEGRAL 50000.0f
+#define PID_MAX_INTEGRAL 500.0f
 
 // #define TEST_LOOP_SPEED  0 // uncomment to measure performance
 
@@ -89,11 +89,11 @@ static IRAM_ATTR void stable_flight_task(void* arg)
 
     // PID gains
     float roll_kp = 4.0f;
-    float roll_ki = 10.0f;
+    float roll_ki = 2.0f;
     float roll_kd = 0.4f;
 
     float pitch_kp = 4.0f;
-    float pitch_ki = 150.0f;
+    float pitch_ki = 2.0f;
     float pitch_kd = 0.4f;
 
     float yaw_kp = 10.0f;
@@ -156,14 +156,13 @@ static IRAM_ATTR void stable_flight_task(void* arg)
                 // get current attitude
                 esp_madgwick_get_attitude(&cur_roll, &cur_pitch, &cur_yaw);
                 esp_madgwick_get_gyro(&gx, &gy, &gz);
-                // ESP_LOGI(TAG, "%f\t%f\t%f", cur_roll, cur_pitch, cur_yaw);
 
                 // roll pid
                 des_roll = map(channels.channel_1, 150, 1900, -30.0f, 30.0f);
                 roll_error = des_roll - cur_roll;
 
                 roll_integral += roll_error*dt;
-                if (throttle > BLDC_MIN_ROT_SPEED + 80)
+                if (throttle < BLDC_MIN_ROT_SPEED + 80)
                     roll_integral = 0.0f; // reset integral when throttle is low
 
                 if (roll_integral > PID_MAX_INTEGRAL)
@@ -181,7 +180,7 @@ static IRAM_ATTR void stable_flight_task(void* arg)
                 pitch_error = des_pitch - cur_pitch;
 
                 pitch_integral += pitch_error*dt;
-                if (throttle > BLDC_MIN_ROT_SPEED + 80)
+                if (throttle < BLDC_MIN_ROT_SPEED + 80)
                     pitch_integral = 0.0f; // reset integral when throttle is low
 
                 if (pitch_integral > PID_MAX_INTEGRAL)
@@ -199,7 +198,7 @@ static IRAM_ATTR void stable_flight_task(void* arg)
                 yaw_error = des_yaw - gz;
 
                 yaw_integral += yaw_error*dt;
-                if (throttle > BLDC_MIN_ROT_SPEED + 80)
+                if (throttle < BLDC_MIN_ROT_SPEED + 80)
                     yaw_integral = 0.0f; // reset integral when throttle is low
 
                 if (yaw_integral > PID_MAX_INTEGRAL)
@@ -231,6 +230,7 @@ static IRAM_ATTR void stable_flight_task(void* arg)
                 for (uint32_t i = 0; i < BLDC_NUM; i++)
                     tiny_bldc_set_speed(bldc_conf + i, (uint32_t)speed[i]);
                 // ESP_LOGI(TAG, "%ld\t%ld\t%ld\t%ld", speed[0], speed[1], speed[2], speed[3]);
+                // ESP_LOGI(TAG, "%f\t%f\t%f", roll_integral, pitch_integral, yaw_integral);
 
 #ifdef TEST_LOOP_SPEED
                 uint64_t loop_end = esp_timer_get_time() - loop_start;
@@ -296,7 +296,7 @@ void app_main(void)
     }
     tiny_bldc_arm(bldc_conf, BLDC_NUM);
 
-    xTaskCreate(stable_flight_task, "stable_flight_task", 4096, bldc_conf, 15, NULL);
+    xTaskCreate(stable_flight_task, "stable_flight_task", 4096, bldc_conf, 16, NULL);
 
     while (1)
     {
