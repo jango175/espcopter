@@ -23,7 +23,8 @@
 
 #define BLDC_NUM         4
 
-#define PID_MAX_INTEGRAL 500.0f
+#define PID_MAX_INTEGRAL 100.0f
+#define ALPHA            0.7f
 
 // #define TEST_LOOP_SPEED  0 // uncomment to measure performance
 
@@ -79,28 +80,32 @@ static IRAM_ATTR void stable_flight_task(void* arg)
     float pitch_pid = 0.0f;
     float yaw_pid = 0.0f;
 
-    float prev_roll_error = 0.0f;
-    float prev_pitch_error = 0.0f;
-    float prev_yaw_error = 0.0f;
-
     float roll_integral = 0.0f;
     float pitch_integral = 0.0f;
     float yaw_integral = 0.0f;
 
+    float filtered_roll_error = 0.0f;
+    float filtered_pitch_error = 0.0f;
+    float filtered_yaw_error = 0.0f;
+
+    float prev_filtered_roll_error = 0.0f;
+    float prev_filtered_pitch_error = 0.0f;
+    float prev_filtered_yaw_error = 0.0f;
+
     // PID gains
     float roll_kp = 4.0f;
-    float roll_ki = 2.0f;
-    float roll_kd = 0.4f;
+    float roll_ki = 1.5f;
+    float roll_kd = 0.35f;
 
     float pitch_kp = 4.0f;
-    float pitch_ki = 2.0f;
-    float pitch_kd = 0.4f;
+    float pitch_ki = 1.5f;
+    float pitch_kd = 0.35f;
 
     float yaw_kp = 10.0f;
     float yaw_ki = 0.0f;
     float yaw_kd = 0.0f;
 
-    uint32_t dt_ms = 3;
+    uint32_t dt_ms = 2;
     float dt = dt_ms/1000.0f;
 
     int32_t speed[BLDC_NUM];
@@ -123,9 +128,9 @@ static IRAM_ATTR void stable_flight_task(void* arg)
             roll_integral = 0.0f;
             pitch_integral = 0.0f;
             yaw_integral = 0.0f;
-            prev_roll_error = 0.0f;
-            prev_pitch_error = 0.0f;
-            prev_yaw_error = 0.0f;
+            prev_filtered_roll_error = 0.0f;
+            prev_filtered_pitch_error = 0.0f;
+            prev_filtered_yaw_error = 0.0f;
 
             // start bldc motors
             for (uint32_t i = BLDC_MIN_SPEED; i < BLDC_MIN_ROT_SPEED; i++)
@@ -170,10 +175,12 @@ static IRAM_ATTR void stable_flight_task(void* arg)
                 else if (roll_integral < -PID_MAX_INTEGRAL)
                     roll_integral = -PID_MAX_INTEGRAL;
 
+                filtered_roll_error = ALPHA*prev_filtered_roll_error + (1.0f - ALPHA)*roll_error;
+
                 roll_pid = roll_kp*roll_error +
                             roll_ki*roll_integral +
-                            roll_kd*(roll_error - prev_roll_error)/dt;
-                prev_roll_error = roll_error;
+                            roll_kd*(filtered_roll_error - prev_filtered_roll_error)/dt;
+                prev_filtered_roll_error = filtered_roll_error;
 
                 // pitch pid
                 des_pitch = map(channels.channel_2, 150, 1900, -30.0f, 30.0f);
@@ -188,10 +195,12 @@ static IRAM_ATTR void stable_flight_task(void* arg)
                 else if (pitch_integral < -PID_MAX_INTEGRAL)
                     pitch_integral = -PID_MAX_INTEGRAL;
 
+                filtered_pitch_error = ALPHA*prev_filtered_pitch_error + (1.0f - ALPHA)*pitch_error;
+
                 pitch_pid = pitch_kp*pitch_error +
                             pitch_ki*pitch_integral +
-                            pitch_kd*(pitch_error - prev_pitch_error)/dt;
-                prev_pitch_error = pitch_error;
+                            pitch_kd*(filtered_pitch_error - prev_filtered_pitch_error)/dt;
+                prev_filtered_pitch_error = filtered_pitch_error;
 
                 // yaw pid
                 des_yaw = -map(channels.channel_4, 150, 1900, -150.0f, 150.0f);
@@ -206,10 +215,12 @@ static IRAM_ATTR void stable_flight_task(void* arg)
                 else if (yaw_integral < -PID_MAX_INTEGRAL)
                     yaw_integral = -PID_MAX_INTEGRAL;
 
+                filtered_yaw_error = ALPHA*prev_filtered_yaw_error + (1.0f - ALPHA)*yaw_error;
+
                 yaw_pid = yaw_kp*yaw_error +
                             yaw_ki*yaw_integral +
-                            yaw_kd*(yaw_error - prev_yaw_error)/dt;
-                prev_yaw_error = yaw_error;
+                            yaw_kd*(filtered_yaw_error - prev_filtered_yaw_error)/dt;
+                prev_filtered_yaw_error = filtered_yaw_error;
 
                 // mixer
                 speed[0] += (int32_t)(-pitch_pid - roll_pid - yaw_pid);
