@@ -25,6 +25,7 @@
 
 #define PID_MAX_INTEGRAL 100.0f
 #define ALPHA            0.7f
+#define MIN_THROTTLE     BLDC_MIN_ROT_SPEED + 80
 
 // #define TEST_LOOP_SPEED  0 // uncomment to measure performance
 
@@ -58,7 +59,7 @@ static IRAM_ATTR void stable_flight_task(void* arg)
     tiny_bldc_conf_t* bldc_conf = (tiny_bldc_conf_t*)arg;
 
     crsf_channels_t channels;
-    bool armed = false;
+    int32_t armed = 0;
 
     float des_roll = 0.0f;
     float des_pitch = 0.0f;
@@ -117,12 +118,14 @@ static IRAM_ATTR void stable_flight_task(void* arg)
         // check for arm
         get_channels(&channels);
 
-        if (channels.channel_5 < 2000 && channels.channel_5 > 1500 && channels.channel_3 < 200 && channels.channel_3 > 0)
-            armed = true;
-        else
-            armed = false;
+        if (channels.channel_5 < 2000 && channels.channel_5 > 1500 && channels.channel_3 >= 200)
+            armed = -1;
+        else if (channels.channel_5 <= 1500)
+            armed = 0;
+        else if (channels.channel_5 < 2000 && channels.channel_5 > 1500 && channels.channel_3 < 200 && channels.channel_3 > 0 && armed == 0)
+            armed = 1;
 
-        if (armed)
+        if (armed == 1)
         {
             // reset PIDs
             roll_integral = 0.0f;
@@ -151,7 +154,7 @@ static IRAM_ATTR void stable_flight_task(void* arg)
 
                 // get channels
                 get_channels(&channels);
-                // ESP_LOGI(TAG, "%d", channels.channel_5);
+                // ESP_LOGI(TAG, "%d", channels.channel_3);
 
                 // map throttle
                 int32_t throttle = (int32_t)map(channels.channel_3, 150, 1900, BLDC_MIN_ROT_SPEED, BLDC_MAX_SPEED);
@@ -167,7 +170,7 @@ static IRAM_ATTR void stable_flight_task(void* arg)
                 roll_error = des_roll - cur_roll;
 
                 roll_integral += roll_error*dt;
-                if (throttle < BLDC_MIN_ROT_SPEED + 80)
+                if (throttle < MIN_THROTTLE)
                     roll_integral = 0.0f; // reset integral when throttle is low
 
                 if (roll_integral > PID_MAX_INTEGRAL)
@@ -187,7 +190,7 @@ static IRAM_ATTR void stable_flight_task(void* arg)
                 pitch_error = des_pitch - cur_pitch;
 
                 pitch_integral += pitch_error*dt;
-                if (throttle < BLDC_MIN_ROT_SPEED + 80)
+                if (throttle < MIN_THROTTLE)
                     pitch_integral = 0.0f; // reset integral when throttle is low
 
                 if (pitch_integral > PID_MAX_INTEGRAL)
@@ -207,7 +210,7 @@ static IRAM_ATTR void stable_flight_task(void* arg)
                 yaw_error = des_yaw - gz;
 
                 yaw_integral += yaw_error*dt;
-                if (throttle < BLDC_MIN_ROT_SPEED + 80)
+                if (throttle < MIN_THROTTLE)
                     yaw_integral = 0.0f; // reset integral when throttle is low
 
                 if (yaw_integral > PID_MAX_INTEGRAL)
