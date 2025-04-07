@@ -1,3 +1,4 @@
 # ESP-IDF quadcopter
+Simple quadcopter based on the ESP32-S3 board.
 
-![Screenshot 2025-04-02 010920](https://github.com/user-attachments/assets/613fd3e6-9d61-45e4-9a11-24ab582e6ca2)
+![Whoop_assembly v67](https://github.com/user-attachments/assets/5852f65b-c16d-498b-bdaa-0ba75d34fa9c)
